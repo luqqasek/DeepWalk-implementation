@@ -84,7 +84,7 @@ def predict(G, embeddings, return_f1_score=False):
 if __name__ == "__main__":
     G = read_from_pyg(path)
 
-    f = open("our_trained_on_best_with_decay.csv", "a")
+    f = open("our_trained_on_best.csv", "a")
     f.write(
         "name,dimensions,number_of_walks,walk_length,window_size,duration,f1_binary_lr,f1_macro_lr,f1_binary_xgb,f1_macro_xgb,duration_sd,f1_binary_lr_sd,f1_macro_lr_sd,f1_binary_xgb_sd,f1_macro_xgb_sd\n")
     f.close()
