@@ -1,4 +1,5 @@
 import torch
+from torch.utils.data import Dataset
 from torch_geometric import utils
 import networkx as nx
 from sklearn.linear_model import LogisticRegression
@@ -7,6 +8,11 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import f1_score, confusion_matrix
 from xgboost import XGBClassifier
 import numpy as np
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+from sklearn.manifold import TSNE
+
 
 def read_from_pyg(path):
     """
@@ -76,3 +82,80 @@ def create_freq_dict(G, num_walks):
     # Creating dict
     freq_dict = {i: float(result[:, i]) for i in range(result.shape[1])}
     return freq_dict
+
+
+class FraudDataset(Dataset):
+
+    def __init__(self, walks, window_size):
+
+        """
+        :param walks: the generated random walks
+        :param window_size: the window size for which we will include context words
+        """
+
+        self.walks = walks
+        self.window_size = window_size
+
+        self.vocab = self.build_vocab()
+        # all pairs of (center word,context word)
+        self.pairs = self.get_pairs()
+        self.X = np.zeros((len(self.pairs), len(self.vocab)))
+        self.Y = np.zeros((len(self.pairs), len(self.vocab)))
+        self.X[np.arange(len(self.pairs)), [pair[0] for pair in self.pairs]] = 1
+        self.Y[np.arange(len(self.pairs)), [pair[1] for pair in self.pairs]] = 1
+
+    def build_vocab(self):
+        vocab = list(set(node for walk in self.walks for node in walk))
+        return vocab
+
+    def get_pairs(self):
+        """
+        Giving a list of pairs of the form [(center_word,context_word)]
+        From these pairs, we will have to make one-hot encoded vectors
+        """
+        pairs = []
+        for walk in self.walks:
+            for center_word_pos in range(len(walk)):
+                for w in range(-self.window_size, self.window_size + 1):
+                    # if window size is 2, go to -2,-1,0,1,2
+                    context_word_pos = center_word_pos + w
+                    if context_word_pos < 0 or context_word_pos >= len(walk) or context_word_pos == center_word_pos:
+                        continue
+                    pairs.append((walk[center_word_pos], walk[context_word_pos]))
+        return pairs
+
+    def __getitem__(self, index):
+        return self.X[index, :], self.Y[index, :]
+
+    def __len__(self):
+        # return the number of samples
+        return self.X.shape[0]
+
+
+def visualize(graph, node2embedding, labeled=False):
+    # Get the node list of the graph
+    nodelist = list(graph.nodes())
+
+    # Embedding vectors
+    x = np.asarray([node2embedding[node] for node in nodelist])
+    x_embedded = TSNE(n_components=2).fit_transform(x)
+    print(f'TSNE succesfully applied: x now of shape: {x_embedded.shape}')
+    df = pd.DataFrame({"Axis 1": x_embedded[:, 0], "Axis 2": x_embedded[:, 1]})
+
+    # Probably a better way to do this, but allows us to toggle class labels
+    if not labeled:
+        ax = sns.scatterplot(
+            x="Axis 1", y="Axis 2",
+            data=df,
+            alpha=0.8
+        )
+    else:
+        y = list(nx.get_node_attributes(graph, 'y').values())
+        ax = sns.scatterplot(
+            x="Axis 1", y="Axis 2",
+            data=df,
+            alpha=0.8,
+            hue=y
+        )
+
+    plt.figure(figsize=(10, 10))
